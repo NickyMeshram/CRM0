@@ -8,6 +8,9 @@ import streamlit as st
 
 from recommendation_engine import add_recommendations, build_customer_features
 
+import json
+import urllib.request
+import urllib.error
 
 def send_resend_test_email():
     """Send a test message through Resend's simulated-delivery address."""
