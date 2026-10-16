@@ -94,22 +94,34 @@ dataset_signature = hashlib.md5(pd.util.hash_pandas_object(raw.head(1000), index
 customers["ActionID"] = customers["CustomerID"].astype(str).map(lambda x: f"{dataset_signature}-{x}")
 
 # Automatically execute eligible actions when automation is enabled.
+
+# Automatically log eligible actions when automation is enabled.
 if st.session_state.automation_enabled:
-    eligible = customers[(customers["AutomationEligible"]) & (customers["ChurnRisk"].isin(["HIGH"]))]
+    eligible = customers[
+        customers["AutomationEligible"]
+        & customers["ChurnRisk"].isin(["HIGH"])
+    ]
+
     for _, row in eligible.iterrows():
         aid = row["ActionID"]
+
         if aid not in st.session_state.executed_ids:
             st.session_state.action_log.append({
-                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "ActionID": aid,
+                "Timestamp": datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
                 "CustomerID": str(row["CustomerID"]),
                 "Risk": row["ChurnRisk"],
                 "Priority": row["Priority"],
                 "Action": row["RecommendedAction"],
                 "Channel": row["Channel"],
-                "Status": "AUTO-EXECUTED",
+                "Status": "SIMULATED",
                 "Mode": "Automation",
             })
+
             st.session_state.executed_ids.add(aid)
+
 
 high = int(customers["ChurnRisk"].eq("HIGH").sum())
 critical = int(customers["Priority"].eq("CRITICAL").sum())
@@ -206,12 +218,48 @@ with action_center:
 
 with history:
     st.subheader("📜 Action history & audit trail")
+
     if st.session_state.action_log:
         log_df = pd.DataFrame(st.session_state.action_log)
-        st.dataframe(log_df.iloc[::-1], use_container_width=True, hide_index=True)
-        st.download_button("Download action audit CSV", log_df.to_csv(index=False), "customeriq_action_history.csv", "text/csv")
+
+        # Add missing columns so older records remain compatible.
+        expected_columns = [
+            "ActionID", "Timestamp", "CustomerID", "Risk",
+            "Priority", "Action", "Channel", "Status", "Mode"
+        ]
+
+        for col in expected_columns:
+            if col not in log_df.columns:
+                log_df[col] = ""
+
+        # Make the status clear: logged does not mean delivered.
+        log_df["Status"] = log_df["Status"].replace({
+            "AUTO-EXECUTED": "SIMULATED",
+            "EXECUTED": "SIMULATED",
+        })
+
+        st.caption(
+            "SIMULATED means the action was recorded in the demo. "
+            "It does not confirm that an email was sent or an offer was delivered."
+        )
+
+        st.dataframe(
+            log_df.iloc[::-1],
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.download_button(
+            "Download action audit CSV",
+            log_df.to_csv(index=False),
+            "customeriq_action_history.csv",
+            "text/csv"
+        )
     else:
-        st.info("No actions have been executed yet. Enable automation or execute an action from Action Center.")
+        st.info(
+            "No actions have been logged yet. "
+            "Enable automation or select an action in Action Center."
+        )
 
 with analytics:
     st.subheader("📈 Retention intelligence")
