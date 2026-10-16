@@ -8,6 +8,45 @@ import streamlit as st
 
 from recommendation_engine import add_recommendations, build_customer_features
 
+
+def send_resend_test_email():
+    """Send a test message through Resend's simulated-delivery address."""
+    api_key = st.secrets.get("RESEND_API_KEY", "")
+
+    if not api_key:
+        return False, "RESEND_API_KEY is missing from Streamlit Secrets."
+
+    payload = {
+        "from": "CustomerIQ <onboarding@resend.dev>",
+        "to": ["delivered@resend.dev"],
+        "subject": "CustomerIQ - Resend integration test",
+        "text": (
+            "This is a test from CustomerIQ. "
+            "It verifies the Resend API integration. "
+            "It is not a real customer retention email."
+        ),
+    }
+
+    request = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            return True, result.get("id", "Accepted by Resend")
+    except urllib.error.HTTPError as exc:
+        details = exc.read().decode("utf-8", errors="replace")
+        return False, f"Resend rejected the request (HTTP {exc.code}): {details}"
+    except Exception as exc:
+        return False, f"Email test failed: {exc}"
+
 st.set_page_config(page_title="CustomerIQ | Intelligent Retention", page_icon="🎯", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
@@ -47,6 +86,17 @@ with st.sidebar:
     st.caption("Required: CustomerID, InvoiceNo, InvoiceDate, Quantity, UnitPrice")
     st.divider()
     st.subheader("⚡ Automation")
+
+    st.caption("Email provider test — no customer emails are sent.")
+
+    if st.button("📧 Test Resend Connection", key="test_resend"):
+        success, result = send_resend_test_email()
+
+        if success:
+            st.success(f"Resend accepted the test. Reference: {result}")
+        else:
+            st.error(result)
+
     st.session_state.automation_enabled = st.toggle("Enable auto-execution", value=st.session_state.automation_enabled)
     if st.session_state.automation_enabled:
         st.success("Automation mode ON")
